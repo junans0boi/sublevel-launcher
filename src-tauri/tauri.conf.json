@@ -6,9 +6,10 @@
   "build": { "frontendDist": "../ui" },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{ "title": "Sublevel", "width": 960, "height": 600, "resizable": false, "center": true }],
-    "security": { "csp": "default-src 'self'; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost" }
+    "windows": [{ "label": "main", "title": "Sublevel", "width": 1040, "height": 656, "resizable": false, "center": true, "decorations": false }],
+    "security": { "csp": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost" }
   },
+  "plugins": { "deep-link": { "desktop": { "schemes": ["sublevel"] } } },
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],

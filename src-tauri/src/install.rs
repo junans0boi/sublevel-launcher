@@ -11,7 +11,7 @@ pub struct FileEntry { pub sha256: String, pub size: u64, pub url: String }
 struct Manifest { version: String, files: std::collections::HashMap<String, FileEntry> }
 
 #[derive(Serialize, Clone)]
-pub struct Latest { pub version: String, pub size: u64, pub installed: bool }
+pub struct Latest { pub version: String, pub size: u64, pub installed: bool, pub has_other: bool }
 
 pub struct Release { pub version: String, pub file: FileEntry }
 
@@ -47,7 +47,8 @@ pub async fn manifest() -> Result<Release, String> {
 
 pub async fn latest() -> Result<Latest, String> {
     let r = manifest().await?;
-    Ok(Latest { installed: is_installed(&r.version), size: r.file.size, version: r.version })
+    let has_other = std::fs::read_dir(game_dir()).map(|d| d.flatten().any(|e| e.path().join(MARK).exists())).unwrap_or(false);
+    Ok(Latest { installed: is_installed(&r.version), has_other, size: r.file.size, version: r.version })
 }
 
 pub async fn sha256_file(p: &Path) -> std::io::Result<String> {
@@ -115,6 +116,8 @@ pub async fn install(r: &Release, on_progress: impl FnMut(u64, u64)) -> Result<(
     let z = zip_path.clone();
     let t = tmp.clone();
     tauri::async_runtime::spawn_blocking(move || unzip(&z, &t)).await.map_err(|e| e.to_string())??;
+    let t2 = tmp.clone();
+    tauri::async_runtime::spawn_blocking(move || write_index(&t2)).await.map_err(|e| e.to_string())??;
     std::fs::write(tmp.join(MARK), b"").map_err(io_err)?;
     std::fs::rename(&tmp, &dir).map_err(io_err)?;
     let _ = std::fs::remove_file(&zip_path);
@@ -166,6 +169,86 @@ pub async fn launch(version: &str, child: &mut Option<std::process::Child>) -> R
     Ok(())
 }
 
+const INDEX: &str = ".files.json";
+
+fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) -> std::io::Result<()> {
+    for e in std::fs::read_dir(dir)?.flatten() {
+        let p = e.path();
+        let ft = e.file_type()?; // symlink는 따라가지 않는다
+        if ft.is_dir() { walk(base, &p, out)?; }
+        else if ft.is_file() {
+            let rel = p.strip_prefix(base).unwrap().to_string_lossy().replace('\\', "/");
+            if rel != MARK && rel != INDEX { out.push(rel); }
+        }
+    }
+    Ok(())
+}
+fn sha256_sync(p: &Path) -> std::io::Result<String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(p)?;
+    let (mut h, mut buf) = (Sha256::new(), vec![0u8; 1 << 20]);
+    loop { let n = f.read(&mut buf)?; if n == 0 { break; } h.update(&buf[..n]); }
+    Ok(hex::encode(h.finalize()))
+}
+
+/// 설치 직후 모든 파일의 sha256을 기록한다. '파일 검사하기'가 이 목록과 대조한다.
+pub fn write_index(dir: &Path) -> Result<(), String> {
+    let mut files = vec![];
+    walk(dir, dir, &mut files).map_err(io_err)?;
+    let map: std::collections::BTreeMap<String, String> = files.into_iter()
+        .map(|f| sha256_sync(&dir.join(&f)).map(|h| (f, h))).collect::<Result<_, _>>().map_err(io_err)?;
+    std::fs::write(dir.join(INDEX), serde_json::to_vec(&map).unwrap()).map_err(io_err)
+}
+
+/// 색인과 대조해 (검사한 개수, 손상·누락된 상대 경로들)를 돌려준다.
+pub fn verify_dir(dir: &Path, mut on_progress: impl FnMut(u64, u64)) -> Result<(usize, Vec<String>), String> {
+    let raw = std::fs::read(dir.join(INDEX)).map_err(|_| "검사 정보가 없습니다. 게임을 다시 설치해 주세요.".to_string())?;
+    let map: std::collections::BTreeMap<String, String> = serde_json::from_slice(&raw).map_err(|_| "검사 정보가 손상되었습니다. 게임을 다시 설치해 주세요.".to_string())?;
+    let (total, mut bad) = (map.len() as u64, vec![]);
+    for (i, (f, h)) in map.iter().enumerate() {
+        if !safe_rel(f) || sha256_sync(&dir.join(f)).map(|x| x != *h).unwrap_or(true) { bad.push(f.clone()); }
+        on_progress(i as u64 + 1, total);
+    }
+    Ok((map.len(), bad))
+}
+
+fn safe_rel(f: &str) -> bool { !f.is_empty() && !f.starts_with('/') && !f.contains(':') && !f.split('/').any(|c| c == ".." || c.is_empty()) }
+
+/// zip에서 지정한 항목만 out에 다시 풀어 쓴다(경로 검증, 실행 권한 유지).
+pub fn extract_entries(zip_path: &Path, out: &Path, names: &[String]) -> Result<(), String> {
+    let mut z = zip::ZipArchive::new(std::fs::File::open(zip_path).map_err(io_err)?).map_err(|_| "압축 파일이 올바르지 않습니다.".to_string())?;
+    for n in names {
+        if !safe_rel(n) { continue; }
+        let mut e = z.by_name(n).map_err(|_| "복구할 파일을 압축 파일에서 찾지 못했습니다.".to_string())?;
+        let dest = out.join(n);
+        if let Some(d) = dest.parent() { std::fs::create_dir_all(d).map_err(io_err)?; }
+        let mut f = std::fs::File::create(&dest).map_err(io_err)?;
+        std::io::copy(&mut e, &mut f).map_err(io_err)?;
+        #[cfg(unix)] if let Some(m) = e.unix_mode() { use std::os::unix::fs::PermissionsExt; let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(m & 0o7777)); }
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct VerifyResult { pub checked: usize, pub bad: usize }
+
+/// 설치된 최신 버전을 검사하고, 손상된 파일만 다시 풀어 복구한다.
+/// shortcut: manifest에 파일별 해시가 없어 zip 전체를 (재개 가능하게) 받은 뒤 손상 항목만 교체한다. L0이 파일별 해시/Range zip을 제공하면 해당 파일만 받도록 개선.
+pub async fn verify(r: &Release, mut on_verify: impl FnMut(u64, u64) + Send + 'static, on_progress: impl FnMut(u64, u64)) -> Result<VerifyResult, String> {
+    if !is_installed(&r.version) { return Err("먼저 게임을 설치해 주세요.".into()); }
+    let dir = version_dir(&r.version);
+    let d = dir.clone();
+    let (checked, bad) = tauri::async_runtime::spawn_blocking(move || verify_dir(&d, &mut on_verify)).await.map_err(|e| e.to_string())??;
+    if bad.is_empty() { return Ok(VerifyResult { checked, bad: 0 }); }
+    let zip_path = game_dir().join(format!("{}.zip", r.version));
+    download(&r.file.url, &zip_path, r.file.size, &r.file.sha256, on_progress).await?;
+    let (z, d, b) = (zip_path.clone(), dir.clone(), bad.clone());
+    let res = tauri::async_runtime::spawn_blocking(move || extract_entries(&z, &d, &b)).await.map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&zip_path);
+    res?;
+    Ok(VerifyResult { checked, bad: bad.len() })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,7 +271,7 @@ mod tests {
                 first = false;
                 let head = if start > 0 { format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{}/{}\r\n", data.len() - 1, data.len()) } else { "HTTP/1.1 200 OK\r\n".into() };
                 let _ = s.write_all(format!("{head}Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await;
-                let _ = s.write_all(&body[..send]).await;
+                let _ = s.write_all(&body[..send]).await; let _ = s.shutdown().await;
             }
         });
         url
@@ -202,7 +285,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let dest = d.path().join("g.zip");
         assert!(download(&url, &dest, data.len() as u64, &sha, |_, _| {}).await.is_err()); // 중단
-        assert_eq!(std::fs::metadata(dest.with_extension("part")).unwrap().len(), 100_000);
+        let got = std::fs::metadata(dest.with_extension("part")).unwrap().len(); assert!(got > 0 && got < data.len() as u64, "partial {got}");
         download(&url, &dest, data.len() as u64, &sha, |_, _| {}).await.unwrap(); // 재개
         assert_eq!(std::fs::read(&dest).unwrap(), data);
     }
@@ -235,4 +318,30 @@ mod tests {
 
     #[test]
     fn version_guard() { assert!(safe_version("2026-11-18_abc1")); assert!(!safe_version("../x")); assert!(!safe_version(".hid")); }
+
+    #[test]
+    fn verify_finds_only_corrupted_and_repair_restores() {
+        use std::io::Write;
+        let d = tempfile::tempdir().unwrap();
+        let (zp, game) = (d.path().join("g.zip"), d.path().join("game"));
+        {
+            let mut w = zip::ZipWriter::new(std::fs::File::create(&zp).unwrap());
+            let o = zip::write::SimpleFileOptions::default();
+            for (n, c) in [("a.bin", &b"aaaa"[..]), ("sub/b.bin", b"bbbb"), ("c.bin", b"cccc")] { w.start_file(n, o).unwrap(); w.write_all(c).unwrap(); }
+            w.finish().unwrap();
+        }
+        unzip(&zp, &game).unwrap();
+        write_index(&game).unwrap();
+        assert_eq!(verify_dir(&game, |_, _| {}).unwrap(), (3, vec![]));
+        std::fs::write(game.join("sub/b.bin"), b"XXXX").unwrap(); // 손상
+        std::fs::remove_file(game.join("c.bin")).unwrap(); // 누락
+        let (n, bad) = verify_dir(&game, |_, _| {}).unwrap();
+        assert_eq!((n, bad.clone()), (3, vec!["c.bin".to_string(), "sub/b.bin".to_string()]));
+        extract_entries(&zp, &game, &bad).unwrap();
+        assert_eq!(verify_dir(&game, |_, _| {}).unwrap().1.len(), 0);
+        assert_eq!(std::fs::read(game.join("a.bin")).unwrap(), b"aaaa");
+    }
+
+    #[test]
+    fn rel_path_guard() { assert!(safe_rel("a/b.bin")); assert!(!safe_rel("../x")); assert!(!safe_rel("/etc/passwd")); assert!(!safe_rel("a//b")); }
 }

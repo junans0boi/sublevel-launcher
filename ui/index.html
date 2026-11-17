@@ -5,28 +5,53 @@
   <title>Sublevel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="style.css">
+  <script src="mock.js"></script>
   <script src="main.js" defer></script>
 </head>
 <body>
-  <main class="panel">
-    <h1>SUBLEVEL</h1>
+<div class="app">
+  <header class="top" data-tauri-drag-region>
+    <span class="ver" id="launcherVer" data-tauri-drag-region>v0.1.0</span>
+    <nav class="links">
+      <button class="link" data-link="news">새소식</button>
+      <button class="link" data-link="support">고객센터</button>
+      <span class="acct" id="acct" hidden><span id="nick"></span></span>
+      <button class="icon" id="gear" aria-label="설정" aria-expanded="false">⚙</button>
+      <button class="icon" id="min" aria-label="최소화">–</button>
+      <button class="icon" id="close" aria-label="닫기">×</button>
+    </nav>
+    <div class="menu" id="menu" hidden>
+      <button id="verifyMenu">파일 검사하기</button>
+      <button id="logout">로그아웃</button>
+    </div>
+  </header>
 
-    <section id="loading"><p class="muted">확인하는 중…</p></section>
+  <section class="hero">
+    <div class="logo">SUBLEVEL</div>
+  </section>
 
-    <section id="out" hidden>
-      <p class="muted">구글 계정으로 로그인하고 게임을 시작하세요.</p>
-      <button id="login" class="primary">구글로 로그인</button>
-      <p class="muted small">브라우저가 열립니다. 이미 구글에 로그인돼 있다면 한 번만 누르면 됩니다.</p>
-    </section>
+  <section class="tiles" id="tiles" aria-label="공지"></section>
 
-    <section id="in" hidden>
-      <p class="who"><span id="nick"></span><button id="logout" class="link">로그아웃</button></p>
-      <p id="ver" class="muted"></p>
-      <div id="bar" class="bar" hidden><i id="fill"></i></div>
-      <button id="play" class="primary" disabled>확인 중…</button>
-    </section>
-
-    <p id="msg" class="msg" role="status" aria-live="polite"></p>
-  </main>
+  <footer class="bottom">
+    <div class="left">
+      <div class="row">
+        <span class="pct" id="pct">0%</span>
+        <dl class="stats">
+          <div><dt>전체</dt><dd id="sTotal">–</dd></div>
+          <div><dt>현재</dt><dd id="sDone">–</dd></div>
+          <div><dt>남은시간</dt><dd id="sEta">–</dd></div>
+          <div><dt>속도</dt><dd id="sSpeed">–</dd></div>
+        </dl>
+        <button id="verify" class="ghost" disabled>파일 검사하기</button>
+      </div>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="barA11y"><i id="fill"></i></div>
+      <div class="row2">
+        <p id="status" class="status" role="status" aria-live="polite">확인하는 중…</p>
+        <label class="auto"><input type="checkbox" id="auto"> 설치 완료 후 바로 게임 실행</label>
+      </div>
+    </div>
+    <button id="main" class="cta" disabled>확인 중…</button>
+  </footer>
+</div>
 </body>
 </html>
