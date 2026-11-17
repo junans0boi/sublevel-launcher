@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Sublevel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <main class="panel">
+    <h1>SUBLEVEL</h1>
+
+    <section id="loading"><p class="muted">확인하는 중…</p></section>
+
+    <section id="out" hidden>
+      <p class="muted">구글 계정으로 로그인하고 게임을 시작하세요.</p>
+      <button id="login" class="primary">구글로 로그인</button>
+      <p class="muted small">브라우저가 열립니다. 이미 구글에 로그인돼 있다면 한 번만 누르면 됩니다.</p>
+    </section>
+
+    <section id="in" hidden>
+      <p class="who"><span id="nick"></span><button id="logout" class="link">로그아웃</button></p>
+      <p id="ver" class="muted"></p>
+      <div id="bar" class="bar" hidden><i id="fill"></i></div>
+      <button id="play" class="primary" disabled>확인 중…</button>
+    </section>
+
+    <p id="msg" class="msg" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>
