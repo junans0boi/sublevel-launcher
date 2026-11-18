@@ -305,6 +305,75 @@ mod tests {
         url
     }
 
+    /// 설치→실행 종단: 모의 서버(manifest·game-token·zip) + 가짜 게임(스크립트).
+    /// 깨끗한 폴더에 설치하고, 재실행 시 다운로드를 건너뛰며, 토큰은 환경변수로만 가고 argv에는 없음을 확인한다.
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn e2e_install_run_token_hygiene() {
+        use std::io::Write;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        // 가짜 게임 zip: Fake.app/Contents/MacOS/fake — 받은 argv와 토큰 환경변수를 파일에 적고 잠시 살아 있는다.
+        let work = tempfile::tempdir().unwrap();
+        let out = work.path().join("seen.txt");
+        let script = format!("#!/bin/sh\necho \"ARGC=$#\" > '{o}'\necho \"ARGV=$*\" >> '{o}'\necho \"TOKEN=$SUBLEVEL_GAME_TOKEN\" >> '{o}'\necho \"SESSION=${{SUBLEVEL_SESSION_TOKEN:-none}}\" >> '{o}'\nsleep 5\n", o = out.display());
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut w = zip::ZipWriter::new(&mut buf);
+            let o = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
+            w.start_file("Fake.app/Contents/MacOS/fake", o).unwrap();
+            w.write_all(script.as_bytes()).unwrap();
+            w.finish().unwrap();
+        }
+        let zip_bytes = buf.into_inner();
+        let sha = hex::encode(Sha256::digest(&zip_bytes));
+        let hits = Arc::new(AtomicUsize::new(0));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", l.local_addr().unwrap());
+        let (b2, h2, z2, sha2) = (base.clone(), hits.clone(), zip_bytes.clone(), sha.clone());
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut s, _)) = l.accept().await else { return };
+                let (b, h, z, sha) = (b2.clone(), h2.clone(), z2.clone(), sha2.clone());
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 4096]; let n = s.read(&mut buf).await.unwrap_or(0);
+                    let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let (status, ctype, body): (&str, &str, Vec<u8>) = if req.starts_with("GET /api/launcher/manifest") && req.contains("TESTSESSION") {
+                        ("200 OK", "application/json", format!("{{\"version\":\"9.9.9\",\"files\":{{\"mac\":{{\"sha256\":\"{sha}\",\"size\":{},\"url\":\"{b}/game.zip\"}}}}}}", z.len()).into_bytes())
+                    } else if req.starts_with("POST /api/auth/game-token") && req.contains("TESTSESSION") {
+                        ("200 OK", "application/json", br#"{"token":"sg_TESTGAMETOKEN"}"#.to_vec())
+                    } else if req.starts_with("GET /game.zip") {
+                        h.fetch_add(1, Ordering::SeqCst); ("200 OK", "application/zip", z)
+                    } else { ("404 Not Found", "text/plain", vec![]) };
+                    let _ = s.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await;
+                    let _ = s.write_all(&body).await; let _ = s.shutdown().await;
+                });
+            }
+        });
+        let home = tempfile::tempdir().unwrap(); // 깨끗한 설치 폴더
+        std::env::set_var("SUBLEVEL_HOME", home.path());
+        std::env::set_var("SUBLEVEL_API_BASE", &base);
+        std::env::set_var("SUBLEVEL_KEY_SERVICE", "kr.steady2vivid.sublevel.launcher.test");
+        keyring::Entry::new("kr.steady2vivid.sublevel.launcher.test", "session").unwrap().set_password("TESTSESSION").unwrap();
+
+        let r = manifest().await.unwrap();
+        assert!(!is_installed(&r.version));
+        install(&r, |_, _| {}).await.unwrap();
+        assert!(is_installed("9.9.9") && hits.load(Ordering::SeqCst) == 1);
+        install(&manifest().await.unwrap(), |_, _| {}).await.unwrap(); // 재실행: 다운로드 생략
+        assert_eq!(hits.load(Ordering::SeqCst), 1, "재실행 시 다시 받지 않아야 한다");
+
+        let mut child = None;
+        launch("9.9.9", &mut child).await.unwrap();
+        let seen = std::fs::read_to_string(&out).unwrap();
+        assert!(seen.contains("ARGC=0"), "{seen}");
+        assert!(seen.contains("TOKEN=sg_TESTGAMETOKEN"), "{seen}");
+        assert!(seen.contains("SESSION=none"), "세션 토큰은 게임에 넘기지 않는다: {seen}");
+        assert!(!seen.contains("TESTSESSION"));
+        child.unwrap().kill().unwrap();
+        keyring::Entry::new("kr.steady2vivid.sublevel.launcher.test", "session").unwrap().delete_credential().unwrap();
+    }
+
     #[tokio::test]
     async fn resume_and_verify() {
         let data: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();

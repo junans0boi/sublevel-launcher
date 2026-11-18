@@ -18,7 +18,9 @@ pub fn client() -> reqwest::Client {
 }
 
 fn entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEY_SERVICE, KEY_USER).map_err(|_| "키체인을 열 수 없습니다.".to_string())
+    // 시험이 실제 로그인 항목을 건드리지 않도록 키체인 항목 이름을 바꿀 수 있다.
+    let svc = std::env::var("SUBLEVEL_KEY_SERVICE").unwrap_or_else(|_| KEY_SERVICE.into());
+    keyring::Entry::new(&svc, KEY_USER).map_err(|_| "키체인을 열 수 없습니다.".to_string())
 }
 pub fn load_token() -> Option<String> { entry().ok()?.get_password().ok() }
 fn save_token(t: &str) -> Result<(), String> { entry()?.set_password(t).map_err(|_| "키체인에 저장하지 못했습니다.".into()) }
