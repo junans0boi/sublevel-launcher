@@ -2,6 +2,7 @@ const T = window.__TAURI__;
 const { invoke } = T.core;
 const $ = (id) => document.getElementById(id);
 let me = null, latest = null, busy = false, error = false;
+let updating = false; // 런처 자체 업데이트 중이면 게임 실행 후에도 닫지 않는다
 let autoRun = false; // 딥링크 시작이면 설치 후 바로 실행
 
 const size = (n) => (n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : (n / 1048576).toFixed(1) + " MB");
@@ -62,8 +63,12 @@ async function install() {
 }
 async function launch() {
   busy = "launch"; render();
-  try { await invoke("launch_game"); say("게임을 실행했습니다."); }
-  finally { busy = false; }
+  try {
+    await invoke("launch_game");
+    // 게임이 실제로 떠 있고(launch_game이 확인) 내려받기·업데이트 중이 아닐 때만 런처를 닫는다.
+    if ($("closeAfter").checked && !updating) { say("게임을 실행했습니다. 런처를 닫습니다."); setTimeout(() => invoke("quit"), 800); }
+    else say("게임을 실행했습니다.");
+  } finally { busy = false; }
 }
 async function run() {
   if (busy) return;
@@ -105,7 +110,9 @@ $("auto").checked = localStorage.getItem("autoRun") === "1";
 $("auto").onchange = () => localStorage.setItem("autoRun", $("auto").checked ? "1" : "0");
 
 T.event.listen("progress", (ev) => onProgress(ev.payload));
-T.event.listen("updating", (ev) => say(`런처 ${ev.payload} 버전으로 업데이트하는 중… 잠시 후 자동으로 다시 시작합니다.`));
+$("closeAfter").checked = localStorage.getItem("closeAfter") !== "0";
+$("closeAfter").onchange = () => localStorage.setItem("closeAfter", $("closeAfter").checked ? "1" : "0");
+T.event.listen("updating", (ev) => (updating = true, say(`런처 ${ev.payload} 버전으로 업데이트하는 중… 잠시 후 자동으로 다시 시작합니다.`)));
 T.event.listen("deeplink", async () => { if (await invoke("take_start")) startFlow(); });
 
 (async () => {

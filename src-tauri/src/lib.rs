@@ -67,6 +67,10 @@ async fn verify_files(app: tauri::AppHandle) -> Result<install::VerifyResult, St
     install::verify(&r, move |d, t| { let _ = a2.emit("verify", (d, t)); }, progress_emitter(app)).await
 }
 
+/// 게임 실행 후 런처 종료. 게임 프로세스는 부모와 별개로 계속 실행된다.
+#[tauri::command]
+fn quit(app: tauri::AppHandle) { app.exit(0); }
+
 #[tauri::command]
 async fn launch_game(game: State<'_, Game>) -> Result<(), String> {
     let r = install::manifest().await?;
@@ -130,7 +134,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move { self_update(h).await });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![me, login, logout, latest, take_start, news, open_link, install_game, verify_files, launch_game])
+        .invoke_handler(tauri::generate_handler![me, login, logout, latest, take_start, news, open_link, install_game, verify_files, launch_game, quit])
         .run(tauri::generate_context!())
         .expect("런처를 시작하지 못했습니다");
 }

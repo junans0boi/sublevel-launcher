@@ -162,6 +162,15 @@ pub async fn game_token() -> Result<String, String> {
     v["token"].as_str().map(String::from).ok_or_else(|| "서버 응답이 올바르지 않습니다.".into())
 }
 
+/// 0.5초 간격으로 `n`번 보는 동안 프로세스가 살아 있으면 true.
+async fn still_running(child: &mut Option<std::process::Child>, n: u32) -> bool {
+    for _ in 0..n {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if let Some(Ok(Some(_))) = child.as_mut().map(|c| c.try_wait()) { return false; }
+    }
+    true
+}
+
 pub async fn launch(version: &str, child: &mut Option<std::process::Child>) -> Result<(), String> {
     if let Some(c) = child { if c.try_wait().map(|s| s.is_none()).unwrap_or(false) { return Err("게임이 이미 실행 중입니다.".into()); } }
     let exe = find_executable(&version_dir(version)).ok_or("실행 파일을 찾을 수 없습니다. 게임을 다시 설치해 주세요.")?;
@@ -169,6 +178,11 @@ pub async fn launch(version: &str, child: &mut Option<std::process::Child>) -> R
     let c = std::process::Command::new(&exe).env("SUBLEVEL_GAME_TOKEN", token).current_dir(exe.parent().unwrap_or(Path::new(".")))
         .spawn().map_err(|_| "게임을 실행하지 못했습니다.".to_string())?;
     *child = Some(c);
+    // 실제로 떴는지 확인: 3초 안에 종료하면 실패로 본다(런처를 닫지 않고 오류를 보여 준다).
+    if !still_running(child, 6).await {
+        *child = None;
+        return Err("게임이 바로 종료되었습니다. ‘파일 검사하기’로 설치를 확인하거나 다시 설치해 주세요.".into());
+    }
     Ok(())
 }
 
@@ -256,6 +270,17 @@ pub async fn verify(r: &Release, mut on_verify: impl FnMut(u64, u64) + Send + 's
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn detects_early_exit_and_running() {
+        let sh = |s: &str| Some(std::process::Command::new("sh").args(["-c", s]).spawn().unwrap());
+        let mut dead = sh("exit 1");
+        assert!(!still_running(&mut dead, 4).await);
+        let mut alive = sh("sleep 5");
+        assert!(still_running(&mut alive, 4).await);
+        alive.unwrap().kill().unwrap();
+    }
 
     /// 최소 Range 지원 HTTP 서버. cut_at이 Some이면 첫 응답을 그 바이트에서 끊는다.
     async fn serve(data: Vec<u8>, cut_at: Option<usize>) -> String {
