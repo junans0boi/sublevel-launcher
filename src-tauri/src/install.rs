@@ -153,7 +153,10 @@ pub fn find_executable(dir: &Path) -> Option<PathBuf> {
 /// 게임 토큰은 argv가 아니라 환경 변수로만 전달한다.
 pub async fn game_token() -> Result<String, String> {
     let t = load_token().ok_or("로그인이 필요합니다.")?;
-    let r = client().post(format!("{}/api/auth/token", api_base())).bearer_auth(t).send().await.map_err(net_err)?;
+    // 12시간 범위 제한 토큰(game-token)을 우선 쓰고, 아직 없는 서버(404)면 예전 엔드포인트로 폴백한다.
+    let post = |p: &str| client().post(format!("{}/api/auth/{}", api_base(), p)).bearer_auth(&t).send();
+    let mut r = post("game-token").await.map_err(net_err)?;
+    if r.status().as_u16() == 404 { r = post("token").await.map_err(net_err)?; }
     if !r.status().is_success() { return Err(format!("게임 토큰을 받지 못했습니다({}).", r.status().as_u16())); }
     let v: serde_json::Value = r.json().await.map_err(|_| "서버 응답을 읽지 못했습니다.".to_string())?;
     v["token"].as_str().map(String::from).ok_or_else(|| "서버 응답이 올바르지 않습니다.".into())
