@@ -105,6 +105,7 @@ $("auto").checked = localStorage.getItem("autoRun") === "1";
 $("auto").onchange = () => localStorage.setItem("autoRun", $("auto").checked ? "1" : "0");
 
 T.event.listen("progress", (ev) => onProgress(ev.payload));
+T.event.listen("updating", (ev) => say(`런처 ${ev.payload} 버전으로 업데이트하는 중… 잠시 후 자동으로 다시 시작합니다.`));
 T.event.listen("deeplink", async () => { if (await invoke("take_start")) startFlow(); });
 
 (async () => {

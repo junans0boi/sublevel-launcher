@@ -92,6 +92,17 @@ fn on_links<'a>(app: &tauri::AppHandle, urls: impl IntoIterator<Item = &'a str>)
     let _ = app.emit("deeplink", ());
 }
 
+// 시작할 때 한 번 새 런처가 있는지 본다. 있으면 서명을 확인하며 받아 설치하고 다시 시작한다.
+// 실패(오프라인·서버 오류)는 조용히 넘기고 현재 런처를 그대로 쓴다.
+async fn self_update(app: tauri::AppHandle) {
+    use tauri::Emitter;
+    use tauri_plugin_updater::UpdaterExt;
+    let Ok(u) = app.updater() else { return };
+    let Ok(Some(up)) = u.check().await else { return };
+    let _ = app.emit("updating", up.version.clone());
+    if up.download_and_install(|_, _| {}, || {}).await.is_ok() { app.restart(); }
+}
+
 pub fn run() {
     use tauri_plugin_deep_link::DeepLinkExt;
     tauri::Builder::default()
@@ -100,6 +111,7 @@ pub fn run() {
             on_links(app, argv.iter().map(String::as_str));
         }))
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Game::default())
         .manage(PendingStart::default())
         .setup(|app| {
@@ -114,6 +126,8 @@ pub fn run() {
                 let u: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
                 on_links(app.handle(), u.iter().map(String::as_str));
             }
+            let h = app.handle().clone();
+            tauri::async_runtime::spawn(async move { self_update(h).await });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![me, login, logout, latest, take_start, news, open_link, install_game, verify_files, launch_game])
