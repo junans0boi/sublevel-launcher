@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>A안 하강 게이지</title>
+<style>
+:root{--bg:#0B0F14;--panel:#10151C;--line:#2A3340;--text:#E6ECF2;--sub:#98A5B3;--accent:#FF6A2B}
+*{box-sizing:border-box}body{margin:0;width:1040px;height:656px;background:var(--bg);color:var(--text);font:14px/1.5 "Noto Sans KR","Apple SD Gothic Neo",sans-serif;display:grid;grid-template-columns:120px 1fr;overflow:hidden}
+.gauge{border-right:1px solid var(--line);padding:24px 0;display:flex;flex-direction:column;justify-content:space-between;align-items:center;position:relative}
+.gauge::before{content:"";position:absolute;left:60px;top:40px;bottom:40px;width:2px;background:var(--line)}
+.gauge::after{content:"";position:absolute;left:60px;top:40px;height:42%;width:2px;background:var(--accent)}
+.f{position:relative;z-index:1;font:600 13px ui-monospace,Menlo,monospace;color:var(--sub);background:var(--bg);padding:2px 8px;border:1px solid var(--line);border-radius:6px}
+.f.on{color:#0B0F14;background:var(--accent);border-color:var(--accent)}
+main{padding:24px 28px;display:grid;grid-template-rows:auto 1fr auto;gap:16px}
+h1{margin:0;font-size:15px;letter-spacing:.3em}h1 small{color:var(--sub);letter-spacing:0;font-weight:400;margin-left:10px}
+.hero{border:1px solid var(--line);border-radius:14px;background:linear-gradient(to right,var(--bg),transparent 40%),url(../../ui/img/hero.jpg) center/cover;display:flex;align-items:flex-end;padding:20px}
+.hero p{margin:0;font-size:34px;font-weight:700;letter-spacing:.06em}.hero span{color:var(--accent)}
+.row{display:grid;grid-template-columns:1fr 280px;gap:20px;align-items:center}
+.news{display:flex;gap:10px;font-size:13px;color:var(--sub)}.news i{font-style:normal;border:1px solid var(--line);border-radius:999px;padding:3px 12px}
+.pct{font:600 32px ui-monospace,monospace;color:var(--accent)}
+.cta{height:64px;border-radius:12px;background:var(--accent);color:#0B0F14;font-weight:700;font-size:20px;display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 70%,92% 100%,0 100%)}
+</style>
+<div class="gauge"><span class="f">B1</span><span class="f">B2</span><span class="f on">B3</span><span class="f">B4</span><span class="f">B5</span><span class="f">B6</span><span class="f">B7</span><span class="f">B8</span></div>
+<main><h1>SUBLEVEL<small>v0.1.0</small></h1>
+<div class="hero"><p>지하 <span>3층</span>으로 내려가는 중</p></div>
+<div class="row"><div><div class="pct">42%</div><div class="news"><i>설치 안내</i><i>버그 제보</i><i>커뮤니티</i></div></div><div class="cta">▼ 설치 중…</div></div></main>

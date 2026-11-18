@@ -11,7 +11,7 @@
 <body>
 <div class="app">
   <header class="top" data-tauri-drag-region>
-    <span class="ver" id="launcherVer" data-tauri-drag-region>v0.1.0</span>
+    <span class="brand" data-tauri-drag-region>SUBLEVEL <span class="ver" id="launcherVer">v0.1.0</span></span>
     <nav class="links">
       <button class="link" data-link="news">새소식</button>
       <button class="link" data-link="support">고객센터</button>
@@ -26,32 +26,36 @@
     </div>
   </header>
 
-  <section class="hero">
-    <div class="logo">SUBLEVEL</div>
-  </section>
+  <!-- 진행 단계를 지하 층으로 표현하는 세로 타임라인 -->
+  <ol class="timeline" id="timeline" aria-hidden="true"></ol>
 
-  <section class="tiles" id="tiles" aria-label="공지"></section>
+  <main class="main">
+    <section class="hero">
+      <span class="chip" id="zone">ZONE B1 · 대기</span>
+      <p class="caption" id="caption">지하 1층 · 출발 대기</p>
+    </section>
 
-  <footer class="bottom">
-    <div class="left">
+    <section class="cards" id="tiles" aria-label="안내"></section>
+
+    <footer class="deck">
+      <div class="bar" role="progressbar" aria-label="진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="barA11y"><i id="fill"></i></div>
       <div class="row">
-        <span class="pct" id="pct">0%</span>
+        <div class="pct" id="pct">0%</div>
         <dl class="stats">
           <div><dt>전체</dt><dd id="sTotal">–</dd></div>
           <div><dt>현재</dt><dd id="sDone">–</dd></div>
           <div><dt>남은시간</dt><dd id="sEta">–</dd></div>
           <div><dt>속도</dt><dd id="sSpeed">–</dd></div>
         </dl>
-        <button id="verify" class="ghost" disabled>파일 검사하기</button>
+        <div class="side">
+          <button id="verify" class="ghost" disabled>파일 검사하기</button>
+          <label class="auto"><input type="checkbox" id="auto"> 설치 완료 후 바로 실행</label>
+        </div>
+        <button id="main" class="cta" disabled>확인 중…</button>
       </div>
-      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="barA11y"><i id="fill"></i></div>
-      <div class="row2">
-        <p id="status" class="status" role="status" aria-live="polite">확인하는 중…</p>
-        <label class="auto"><input type="checkbox" id="auto"> 설치 완료 후 바로 게임 실행</label>
-      </div>
-    </div>
-    <button id="main" class="cta" disabled>확인 중…</button>
-  </footer>
+      <p id="status" class="status" role="status" aria-live="polite">확인하는 중…</p>
+    </footer>
+  </main>
 </div>
 </body>
 </html>

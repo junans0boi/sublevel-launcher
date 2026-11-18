@@ -13,7 +13,7 @@ struct Game(Mutex<Option<std::process::Child>>);
 struct PendingStart(AtomicBool);
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct NewsItem { title: String, url: String }
+struct NewsItem { title: String, #[serde(default)] desc: String, url: String }
 
 #[tauri::command] async fn me() -> Result<Option<auth::Me>, String> { auth::me().await }
 #[tauri::command] async fn login() -> Result<auth::Me, String> { auth::login().await }
@@ -30,8 +30,11 @@ async fn news() -> Vec<NewsItem> {
         if !r.status().is_success() { return None; }
         r.json::<Vec<NewsItem>>().await.ok()
     }.await;
-    fetched.filter(|v| !v.is_empty()).unwrap_or_else(|| ["게임 설치 및 실행 안내", "문의 및 버그 제보", "커뮤니티 이용 안내"]
-        .iter().map(|t| NewsItem { title: t.to_string(), url: base.clone() }).collect())
+    fetched.filter(|v| !v.is_empty()).unwrap_or_else(|| [
+        ("게임 설치 및 실행 안내", "구글 로그인 후 ‘설치’를 누르면 최신 버전을 내려받아 바로 실행합니다."),
+        ("문의 및 버그 제보", "플레이 중 문제를 발견하면 사이트의 고객센터로 알려 주세요."),
+        ("커뮤니티 이용 안내", "다른 플레이어를 존중하고 규칙을 지켜 주세요. 자세한 내용은 사이트에서 볼 수 있습니다."),
+    ].iter().map(|(t, d)| NewsItem { title: t.to_string(), desc: d.to_string(), url: base.clone() }).collect())
 }
 
 /// 외부 링크는 우리 사이트(API 주소)로만 연다. 다른 값은 거절.

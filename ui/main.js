@@ -11,6 +11,12 @@ const say = (t, err) => { $("status").textContent = t || ""; $("status").classNa
 function setProgress(done, total, speed) {
   const p = total ? Math.min(100, Math.floor((done / total) * 100)) : 0;
   $("pct").textContent = p + "%"; $("fill").style.width = p + "%"; $("barA11y").setAttribute("aria-valuenow", p);
+  document.documentElement.style.setProperty("--p", p);
+  const f = 1 + Math.floor((p * 7) / 100); // 진행률 → 지하 층(B1~B8)
+  document.querySelectorAll("#timeline li").forEach((li, i) => { li.className = i + 1 < f ? "done" : i + 1 === f ? "on" : ""; });
+  document.querySelectorAll("#barA11y i:not(#fill)").forEach((s, i) => s.classList.toggle("on", i < Math.round(p / 5)));
+  $("zone").textContent = `ZONE B${f} · ${p >= 100 ? "접근 가능" : p > 0 ? "하강 중" : "대기"}`;
+  $("caption").textContent = p >= 100 ? "지하 8층 도착 · 준비 완료" : p > 0 ? `지하 ${f}층으로 내려가는 중` : "지하 1층 · 출발 대기";
   $("sTotal").textContent = total ? size(total) : "–"; $("sDone").textContent = total ? size(done) : "–";
   $("sSpeed").textContent = speed ? `${(speed / 1048576).toFixed(2)} MB/s` : "–";
   $("sEta").textContent = speed && total ? clock(Math.max(0, (total - done) / speed)) : "–";
@@ -33,7 +39,7 @@ async function refresh() {
   latest = null; render();
   try {
     latest = await invoke("latest");
-    if (latest.installed) { setProgress(1, 1, 0); say("‘게임 실행’ 버튼을 눌러 게임을 실행해 주세요."); }
+    if (latest.installed) { setProgress(latest.size, latest.size, 0); say("‘게임 실행’ 버튼을 눌러 게임을 실행해 주세요."); }
     else { setProgress(0, latest.size, 0); say(`최신 버전 ${latest.version} · ${size(latest.size)} 을(를) ${latest.has_other ? "업데이트" : "설치"}합니다.`); }
   } catch (e) { say(e, true); setProgress(0, 0, 0); }
   render();
@@ -102,11 +108,16 @@ T.event.listen("progress", (ev) => onProgress(ev.payload));
 T.event.listen("deeplink", async () => { if (await invoke("take_start")) startFlow(); });
 
 (async () => {
+  const el = (tag, cls, text) => { const e = document.createElement(tag); e.className = cls; if (text) e.textContent = text; return e; };
+  $("timeline").replaceChildren(...Array.from({ length: 8 }, (_, i) => el("li", "", "B" + (i + 1))));
+  $("barA11y").prepend(...Array.from({ length: 20 }, () => el("i", "")));
   setProgress(0, 0, 0); render();
   invoke("news").then((items) => {
     $("tiles").replaceChildren(...items.slice(0, 3).map((n, i) => {
-      const b = document.createElement("button"); b.className = "tile"; b.style.backgroundImage = `url(img/t${i + 1}.jpg)`;
-      const s = document.createElement("span"); s.textContent = n.title; b.append(s); b.onclick = () => invoke("open_link", { url: n.url }); return b;
+      const b = el("button", "tile"), img = el("span", "img"), txt = el("span", "txt");
+      img.style.backgroundImage = `url(img/t${i + 1}.jpg)`;
+      txt.append(el("span", "t", n.title), el("span", "d", n.desc || ""));
+      b.append(img, txt); b.onclick = () => invoke("open_link", { url: n.url }); return b;
     }));
   }).catch(() => {});
   try { const m = await invoke("me"); if (m) await enter(m); else { say("구글 계정으로 로그인하고 게임을 시작하세요."); render(); } }

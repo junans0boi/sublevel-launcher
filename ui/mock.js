@@ -29,7 +29,10 @@ if (!window.__TAURI__) {
     verify_files: async () => { if (q.get("hold")) await new Promise(() => {}); await sleep(800); return { checked: 1284, bad: q.get("bad") ? 1 : 0 }; },
     launch_game: async () => { await sleep(300); },
     take_start: async () => q.get("start") === "1",
-    news: async () => [{ title: "게임 설치 및 실행 안내", url: "" }, { title: "무기 밸런스 및 탄약 업데이트", url: "" }, { title: "계정 보안 안내", url: "" }],
+    news: async () => [
+      { title: "게임 설치 및 실행 안내", desc: "구글 로그인 후 ‘설치’를 누르면 최신 버전을 내려받아 바로 실행합니다.", url: "" },
+      { title: "문의 및 버그 제보", desc: "플레이 중 문제를 발견하면 사이트의 고객센터로 알려 주세요.", url: "" },
+      { title: "커뮤니티 이용 안내", desc: "다른 플레이어를 존중하고 규칙을 지켜 주세요. 자세한 내용은 사이트에서 볼 수 있습니다.", url: "" }],
     open_link: async () => {},
   };
   window.__TAURI__ = {
