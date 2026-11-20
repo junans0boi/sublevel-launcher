@@ -1,16 +1,25 @@
 # Windows 런처 설치 파일을 GitHub Actions(windows-latest)에서 만든다. Mac은 로컬에서 빌드한다.
 # 산출물(NSIS .exe)은 아티팩트로 받아 sublevel-web/scripts/launcher_upload.sh 로 서버에 올린다. 비밀 값 없음.
+# v* 태그 push면 GitHub Release도 만들고 exe를 첨부한다(노트 = 태그 메시지 + 이전 태그 이후 커밋, GITHUB_TOKEN만).
 name: build
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
     paths: ["src-tauri/**", "ui/**", "package*.json", ".github/workflows/build.yml"]
+permissions:
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
@@ -23,3 +32,15 @@ jobs:
           name: sublevel-launcher-windows
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}", TAG: "${{ github.ref_name }}" }
+        run: |
+          ref="repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG"
+          if [ "$(gh api "$ref" -q .object.type)" = tag ]; then  # 주석 태그면 메시지가 노트 첫머리
+            gh api "repos/$GITHUB_REPOSITORY/git/tags/$(gh api "$ref" -q .object.sha)" -q .message > notes.md
+          else : > notes.md; fi
+          prev=$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)
+          { echo; echo "## Commits${prev:+ since $prev}"; git log -n 100 --no-merges --format='- %s (%h)' ${prev:+"$prev.."}"$TAG"; } >> notes.md
+          gh release create "$TAG" --verify-tag --title "Sublevel Launcher $TAG" --notes-file notes.md src-tauri/target/release/bundle/nsis/*.exe
