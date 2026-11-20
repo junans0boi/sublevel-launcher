@@ -90,3 +90,9 @@ git push origin v0.1.8
 
 ## 이미지 출처
 히어로·공지 타일 이미지는 게임(junans0boi/sublevel)의 자체 캡처(`docs/bible/img/ui/`, `docs/tracks/interact_captures/`)를 잘라 썼다. 외부 상표·로고·이미지는 없다. 다른 게임 런처는 레이아웃 구조만 참고했다.
+
+## 측정값 (2026-11-20, Mac M4 Pro, 런처 0.1.7)
+- 앱 용량: `Sublevel.app` 4.8 MB.
+- 메모리: 대기 화면에서 런처 본 프로세스 RSS 85 MB(물리 사용량 24 MB) + 시스템 WebKit 보조 프로세스(공유라 따로 나눠 재지 않음).
+- 종단: 로그인 → v0.2.0(507 MiB) 다운로드 약 3.0 MiB/s → sha256 일치 → 설치 → 게임 실행 확인(junans0boi/sublevel#393). `cargo test` 13개 통과(해시 불일치·Range 재개 포함).
+- Windows: Actions에서 NSIS 빌드만 확인, **실기 미검증**.
