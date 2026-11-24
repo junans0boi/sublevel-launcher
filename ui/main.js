@@ -64,10 +64,10 @@ async function install() {
 async function launch() {
   busy = "launch"; render();
   try {
-    await invoke("launch_game");
-    // 게임이 실제로 떠 있고(launch_game이 확인) 내려받기·업데이트 중이 아닐 때만 런처를 닫는다.
-    if ($("closeAfter").checked && !updating) { say("게임을 실행했습니다. 런처를 닫습니다."); setTimeout(() => invoke("quit"), 800); }
-    else say("게임을 실행했습니다.");
+    // 게임이 실제로 떠 있고(launch_game이 확인) 런처 업데이트 중이 아닐 때만 런처를 닫는다. 닫기는 Rust가 한다.
+    const close = $("closeAfter").checked && !updating;
+    await invoke("launch_game", { close });
+    say(close ? "게임을 실행했습니다. 런처를 닫습니다." : "게임을 실행했습니다.");
   } finally { busy = false; }
 }
 async function run() {

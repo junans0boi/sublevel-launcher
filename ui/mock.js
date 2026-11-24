@@ -27,8 +27,7 @@ if (!window.__TAURI__) {
       installed = true;
     },
     verify_files: async () => { if (q.get("hold")) await new Promise(() => {}); await sleep(800); return { checked: 1284, bad: q.get("bad") ? 1 : 0 }; },
-    launch_game: async () => { await sleep(300); },
-    quit: async () => { window.__quit = (window.__quit || 0) + 1; },
+    launch_game: async (a) => { await sleep(300); if (a?.close) window.__quit = (window.__quit || 0) + 1; },
     take_start: async () => q.get("start") === "1",
     news: async () => [
       { title: "게임 설치 및 실행 안내", desc: "구글 로그인 후 ‘설치’를 누르면 최신 버전을 내려받아 바로 실행합니다.", url: "" },

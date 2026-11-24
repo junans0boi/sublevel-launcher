@@ -67,17 +67,25 @@ async fn verify_files(app: tauri::AppHandle) -> Result<install::VerifyResult, St
     install::verify(&r, move |d, t| { let _ = a2.emit("verify", (d, t)); }, progress_emitter(app)).await
 }
 
-/// 게임 실행 후 런처 종료. 게임 프로세스는 부모와 별개로 계속 실행된다.
+/// `close`면 게임이 뜬 것을 확인한 뒤 런처를 닫는다. 게임 프로세스는 부모와 별개로 계속 실행된다.
+/// 닫기는 Rust에서 한다 — 게임 창이 런처를 가리면 웹뷰 JS(타이머·IPC 응답)가 멈추거나 늦어질 수 있다.
 #[tauri::command]
-fn quit(app: tauri::AppHandle) { app.exit(0); }
-
-#[tauri::command]
-async fn launch_game(game: State<'_, Game>) -> Result<(), String> {
+async fn launch_game(app: tauri::AppHandle, game: State<'_, Game>, close: bool) -> Result<(), String> {
     let r = install::manifest().await?;
     if !install::is_installed(&r.version) { return Err("먼저 게임을 설치해 주세요.".into()); }
     let mut taken = game.0.lock().unwrap().take();
     let res = install::launch(&r.version, &mut taken).await;
     *game.0.lock().unwrap() = taken;
+    if res.is_ok() && close {
+        // 상태 문구가 잠깐 보이게 0.8초 뒤 종료
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+            app.exit(0);
+            // 안전장치: 이벤트 루프가 3초 안에 끝내지 못하면 강제 종료
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            std::process::exit(0);
+        });
+    }
     res
 }
 
@@ -134,7 +142,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move { self_update(h).await });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![me, login, logout, latest, take_start, news, open_link, install_game, verify_files, launch_game, quit])
+        .invoke_handler(tauri::generate_handler![me, login, logout, latest, take_start, news, open_link, install_game, verify_files, launch_game])
         .run(tauri::generate_context!())
         .expect("런처를 시작하지 못했습니다");
 }
